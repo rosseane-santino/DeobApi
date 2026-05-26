@@ -1,24 +1,22 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const multer = require("multer");
 
 const { deobfuscate } = require("./index");
 
 const app = express();
-app.use(express.json());
+const upload = multer({ dest: "uploads/" });
 
-app.post("/deobfuscate", async (req, res) => {
+// file upload endpoint
+app.post("/deobfuscate", upload.single("file"), async (req, res) => {
     try {
-        const { code } = req.body;
-
-        if (!code) {
-            return res.status(400).json({ error: "No code provided" });
+        if (!req.file) {
+            return res.status(400).json({ error: "No file uploaded" });
         }
 
-        const inputPath = path.join(__dirname, "input.lua");
+        const inputPath = req.file.path;
         const outputPath = path.join(__dirname, "output.lua");
-
-        fs.writeFileSync(inputPath, code);
 
         await deobfuscate(inputPath, outputPath);
 
