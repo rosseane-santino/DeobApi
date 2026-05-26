@@ -428,4 +428,4 @@ const deobfuscate = async (path, outFile="out.lua") => {
     ))
 }
 
-deobfuscate(process.argv[2], process.argv[3])
+module.exports = { deobfuscate };
