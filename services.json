@@ -1,0 +1,45 @@
+{
+  "Players": "Players",
+  "Workspace": "Workspace",
+  "ReplicatedStorage": "ReplicatedStorage",
+  "ReplicatedFirst": "ReplicatedFirst",
+  "Lighting": "Lighting",
+  "StarterGui": "StarterGui",
+  "StarterPack": "StarterPack",
+  "StarterPlayer": "StarterPlayer",
+  "StarterCharacterScripts": "StarterCharacterScripts",
+  "StarterPlayerScripts": "StarterPlayerScripts",
+
+  "HttpService": "HttpService",
+  "TweenService": "TweenService",
+  "RunService": "RunService",
+  "UserInputService": "UserInputService",
+  "GuiService": "GuiService",
+  "VirtualInputManager": "VirtualInputManager",
+
+  "SoundService": "SoundService",
+  "Debris": "Debris",
+  "TeleportService": "TeleportService",
+  "PathfindingService": "PathfindingService",
+  "MarketplaceService": "MarketplaceService",
+
+  "DataStoreService": "DataStoreService",
+  "CollectionService": "CollectionService",
+  "PhysicsService": "PhysicsService",
+  "TextService": "TextService",
+  "LocalizationService": "LocalizationService",
+  "InsertService": "InsertService",
+  "AssetService": "AssetService",
+
+  "Teams": "Teams",
+  "Chat": "Chat",
+  "LogService": "LogService",
+  "SocialService": "SocialService",
+  "NotificationService": "NotificationService",
+  "ContextActionService": "ContextActionService",
+
+  "MessagingService": "MessagingService",
+  "AnalyticsService": "AnalyticsService",
+  "PolicyService": "PolicyService",
+  "HttpRbxApiService": "HttpRbxApiService"
+}
