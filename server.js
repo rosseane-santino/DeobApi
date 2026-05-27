@@ -82,8 +82,15 @@ app.post("/moon", upload.single("file"), async (req, res) => {
             });
         }
 
-        // Convert uploaded file into Blob
-        const fileBuffer = fs.readFileSync(req.file.path);
+        // Create temp file with .lua extension
+        const tempLuaPath = path.join(
+            __dirname,
+            `temp_${Date.now()}.lua`
+        );
+
+        fs.copyFileSync(req.file.path, tempLuaPath);
+
+        const fileBuffer = fs.readFileSync(tempLuaPath);
 
         const blob = new Blob([fileBuffer]);
 
@@ -92,7 +99,7 @@ app.post("/moon", upload.single("file"), async (req, res) => {
         formData.append(
             "file",
             blob,
-            req.file.originalname || "script.lua"
+            "script.lua"
         );
 
         const response = await fetch(
@@ -105,7 +112,9 @@ app.post("/moon", upload.single("file"), async (req, res) => {
 
         const data = await response.json();
 
+        // Cleanup
         fs.unlinkSync(req.file.path);
+        fs.unlinkSync(tempLuaPath);
 
         if (!data.success) {
             return res.status(400).json({
