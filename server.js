@@ -144,5 +144,77 @@ app.post("/moon", upload.single("file"), async (req, res) => {
     }
 });
 
+// -------------------- /ib2 --------------------
+app.post("/ib2", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: "No file uploaded"
+            });
+        }
+
+        // Create temp .lua file
+        const tempLuaPath = path.join(
+            __dirname,
+            `temp_${Date.now()}.lua`
+        );
+
+        fs.copyFileSync(req.file.path, tempLuaPath);
+
+        const fileBuffer = fs.readFileSync(tempLuaPath);
+
+        const blob = new Blob([fileBuffer]);
+
+        const formData = new FormData();
+
+        formData.append(
+            "file",
+            blob,
+            "script.lua"
+        );
+
+        const response = await fetch(
+            "https://leakd-detector.up.railway.app/ironbrew2",
+            {
+                method: "POST",
+                body: formData
+            }
+        );
+
+        const data = await response.json();
+
+        // Cleanup
+        fs.unlinkSync(req.file.path);
+        fs.unlinkSync(tempLuaPath);
+
+        if (!data.success) {
+            return res.status(400).json({
+                success: false,
+                error: data.error || "Failed to deobfuscate"
+            });
+        }
+
+        let output = data.deobfuscated_code || "";
+
+        // Remove first 2 lines
+        output = output
+            .split("\n")
+            .slice(2)
+            .join("\n");
+
+        res.json({
+            success: true,
+            output
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: err.message
+        });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("Running on", PORT));
