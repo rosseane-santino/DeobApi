@@ -71,5 +71,62 @@ app.post("/deobf2", upload.single("file"), async (req, res) => {
     }
 });
 
+
+// -------------------- /moon --------------------
+app.post("/moon", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: "No file uploaded"
+            });
+        }
+
+        const formData = new FormData();
+
+        formData.append(
+            "file",
+            fs.createReadStream(req.file.path),
+            req.file.originalname
+        );
+
+        const response = await fetch(
+            "https://leakd-detector.up.railway.app/moonsec",
+            {
+                method: "POST",
+                body: formData
+            }
+        );
+
+        const data = await response.json();
+
+        fs.unlinkSync(req.file.path);
+
+        if (!data.success) {
+            return res.status(400).json({
+                success: false,
+                error: data.error || "Failed to deobfuscate"
+            });
+        }
+
+        let output = data.deobfuscated_code || "";
+
+        // Remove first 2 lines
+        output = output.split("\n").slice(2).join("\n");
+
+        res.json({
+            success: true,
+            output
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: err.message
+        });
+    }
+});
+
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("Running on", PORT));
