@@ -2,6 +2,7 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
+const { renameCode } = require("./renamer");
 
 const { deobfuscate } = require("./index");
 const { deobfuscateFile } = require("./white/cli/run");
@@ -206,6 +207,33 @@ app.post("/ib2", upload.single("file"), async (req, res) => {
         res.json({
             success: true,
             output
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: err.message
+        });
+    }
+});
+
+// -------------------- /rename --------------------
+app.post("/rename", express.json({ limit: "5mb" }), (req, res) => {
+    try {
+        const { code } = req.body;
+
+        if (!code) {
+            return res.status(400).json({
+                success: false,
+                error: "Missing code"
+            });
+        }
+
+        const result = renameCode(code);
+
+        res.json({
+            success: true,
+            result
         });
 
     } catch (err) {
