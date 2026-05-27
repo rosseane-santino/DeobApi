@@ -82,12 +82,17 @@ app.post("/moon", upload.single("file"), async (req, res) => {
             });
         }
 
+        // Convert uploaded file into Blob
+        const fileBuffer = fs.readFileSync(req.file.path);
+
+        const blob = new Blob([fileBuffer]);
+
         const formData = new FormData();
 
         formData.append(
             "file",
-            fs.createReadStream(req.file.path),
-            req.file.originalname
+            blob,
+            req.file.originalname || "script.lua"
         );
 
         const response = await fetch(
@@ -112,7 +117,10 @@ app.post("/moon", upload.single("file"), async (req, res) => {
         let output = data.deobfuscated_code || "";
 
         // Remove first 2 lines
-        output = output.split("\n").slice(2).join("\n");
+        output = output
+            .split("\n")
+            .slice(2)
+            .join("\n");
 
         res.json({
             success: true,
@@ -126,7 +134,6 @@ app.post("/moon", upload.single("file"), async (req, res) => {
         });
     }
 });
-
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("Running on", PORT));
