@@ -218,14 +218,21 @@ app.post("/ib2", upload.single("file"), async (req, res) => {
 });
 
 // -------------------- /rename --------------------
-app.post("/rename", express.json({ limit: "5mb" }), (req, res) => {
+app.post("/rename", upload.single("file"), (req, res) => {
     try {
-        const { code } = req.body;
+        let code = "";
+
+        if (req.file) {
+            code = fs.readFileSync(req.file.path, "utf8");
+            fs.unlinkSync(req.file.path);
+        } else if (req.body.code) {
+            code = req.body.code;
+        }
 
         if (!code) {
             return res.status(400).json({
                 success: false,
-                error: "Missing code"
+                error: "Missing code or file"
             });
         }
 
