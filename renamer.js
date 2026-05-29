@@ -1,98 +1,96 @@
 const fs = require("fs");
 
-// load services.json
 const serviceMap = JSON.parse(
     fs.readFileSync("./services.json", "utf8")
 );
 
-// normalize weird GetService({game,"X"})
-function normalizeGetService(code) {
-    return code.replace(
-        /game:GetService\(\s*\{[^,]+,\s*["']([^"']+)["']\s*\}\s*\)/g,
-        'game:GetService("$1")'
-    );
+// reserved keywords + services
+const reserved = new Set([
+    "game","workspace","script","math","string","table","task",
+    "Vector3","Vector2","UDim2","Color3","CFrame","Enum",
+    "Instance","pairs","ipairs","next","wait","print",
+    "warn","error","require","typeof","setmetatable",
+    "getmetatable","rawget","rawset","tonumber","tostring"
+]);
+
+for (const k of Object.keys(serviceMap)) {
+    reserved.add(k);
 }
 
-// standard GetService cleanup
-function standardizeGetService(code) {
-    return code.replace(
-        /game:GetService\(\s*["']([^"']+)["']\s*\)/g,
-        (m, name) => `game:GetService("${name}")`
-    );
+// mapping old -> new
+const map = new Map();
+
+// counters
+let i = 0;
+function gen() {
+    return `v${i++}`;
 }
 
-// inject locals from used services
-function injectServiceVars(code) {
-    const found = [...code.matchAll(/game:GetService\("([^"]+)"\)/g)];
-
-    const used = [...new Set(found.map(m => m[1]))];
-
-    let header = "";
-
-    for (const s of used) {
-        header += `local ${s} = game:GetService("${s}")\n`;
+// collect ALL local variables (most important fix)
+function collectLocals(code) {
+    const matches = [...code.matchAll(/local\s+([A-Za-z_][A-Za-z0-9_]*)/g)];
+    for (const m of matches) {
+        const name = m[1];
+        if (!reserved.has(name) && !map.has(name)) {
+            map.set(name, gen());
+        }
     }
-
-    return header + "\n" + code;
 }
 
-// fix FindFirstChild noise
-function cleanFindFirstChild(code) {
-    return code.replace(
-        /:FindFirstChild\([^,]+,\s*([^)]+)\)/g,
-        ":FindFirstChild($1)"
-    );
+// special Instance.new tracking (optional better naming)
+function collectInstances(code) {
+    const matches = [...code.matchAll(
+        /local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*Instance\.new\("([^"]+)"\)/g
+    )];
+
+    for (const m of matches) {
+        const name = m[1];
+        const className = m[2];
+
+        if (reserved.has(name)) continue;
+
+        let prefix = "obj";
+
+        if (className === "ScreenGui") prefix = "gui";
+        else if (className === "Frame") prefix = "frame";
+        else if (className === "TextButton") prefix = "btn";
+        else if (className === "TextLabel") prefix = "lbl";
+
+        map.set(name, `${prefix}_${gen()}`);
+    }
 }
 
-// fix WaitForChild noise
-function cleanWaitForChild(code) {
-    return code.replace(
-        /:WaitForChild\([^,]+,\s*([^)]+)\)/g,
-        ":WaitForChild($1)"
-    );
+// LocalPlayer handling
+function collectPlayers(code) {
+    const matches = [...code.matchAll(
+        /local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*game:GetService\("Players"\)\.LocalPlayer/g
+    )];
+
+    for (const m of matches) {
+        map.set(m[1], `player_${gen()}`);
+    }
 }
 
-// remove duplicate Service spam lines
-function removeDuplicateServiceVars(code) {
-    const seen = new Set();
-
-    return code
-        .split("\n")
-        .filter(line => {
-            if (line.includes("game:GetService")) {
-                if (seen.has(line)) return false;
-                seen.add(line);
-            }
-            return true;
-        })
-        .join("\n");
+// apply rename safely
+function apply(code) {
+    for (const [oldName, newName] of map.entries()) {
+        code = code.replace(
+            new RegExp(`\\b${oldName}\\b`, "g"),
+            newName
+        );
+    }
+    return code;
 }
 
-// rename junk variables like add_123 → tab_1
-function renameVariables(code) {
-    let i = 1;
-
-    return code.replace(
-        /\badd_\d+\b/g,
-        () => `tab_${i++}`
-    );
-}
-
-// MAIN PIPELINE
+// main
 function renameCode(code) {
     let out = code;
 
-    out = normalizeGetService(out);
-    out = standardizeGetService(out);
+    collectInstances(out);
+    collectPlayers(out);
+    collectLocals(out); // IMPORTANT: must be last collection pass
 
-    out = cleanFindFirstChild(out);
-    out = cleanWaitForChild(out);
-
-    out = removeDuplicateServiceVars(out);
-
-    out = injectServiceVars(out);
-
-    out = renameVariables(out);
+    out = apply(out);
 
     return out;
 }
