@@ -218,36 +218,30 @@ app.post("/ib2", upload.single("file"), async (req, res) => {
 });
 
 // -------------------- /rename --------------------
-app.post("/rename", upload.single("file"), (req, res) => {
+app.post("/rename", upload.single("file"), async (req, res) => {
     try {
-        let code = "";
-
-        if (req.file) {
-            code = fs.readFileSync(req.file.path, "utf8");
-            fs.unlinkSync(req.file.path);
-        } else if (req.body.code) {
-            code = req.body.code;
+        if (!req.file) {
+            return res.status(400).send("No file uploaded");
         }
 
-        if (!code) {
-            return res.status(400).json({
-                success: false,
-                error: "Missing code or file"
-            });
-        }
+        const code = fs.readFileSync(req.file.path, "utf8");
 
-        const result = renameCode(code);
+        fs.unlinkSync(req.file.path);
 
-        res.json({
-            success: true,
-            result
-        });
+        const prompt =
+            "fully rename the vars and dont add coments to the code and dont comment on it yourself (and dont just give me half of thr code i want full code) here: " +
+            encodeURIComponent(code);
+
+        const url = `https://text.pollinations.ai/${prompt}?model=openai`;
+
+        const response = await fetch(url);
+        const result = await response.text();
+
+        res.setHeader("Content-Type", "text/plain");
+        res.send(result);
 
     } catch (err) {
-        res.status(500).json({
-            success: false,
-            error: err.message
-        });
+        res.status(500).send(err.message);
     }
 });
 
