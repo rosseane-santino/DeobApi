@@ -229,12 +229,20 @@ app.post("/rename", upload.single("file"), async (req, res) => {
         fs.unlinkSync(req.file.path);
 
         const prompt =
-            "fully rename the vars and dont add coments to the code and dont comment on it yourself (and dont just give me half of thr code i want full code) here: " +
-            encodeURIComponent(code);
+            "fully rename the vars and dont add coments to the code and dont comment on it yourself (and dont just give me full code) here:\n\n" +
+            code;
 
-        const url = `https://text.pollinations.ai/${prompt}?model=openai`;
+        const response = await fetch("https://text.pollinations.ai/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                model: "openai",
+                prompt: prompt
+            })
+        });
 
-        const response = await fetch(url);
         const result = await response.text();
 
         res.setHeader("Content-Type", "text/plain");
