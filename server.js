@@ -315,6 +315,39 @@ app.post("/obf", upload.single("file"), async (req, res) => {
         });
     }
 });
+
+// -------------------- /ast --------------------
+app.post("/ast", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: "No file uploaded"
+            });
+        }
+
+        const code = fs.readFileSync(req.file.path, "utf8");
+
+        fs.unlinkSync(req.file.path);
+
+        const ast = parseLuaSource(
+            code,
+            req.file.originalname || "script.lua",
+            true // include tokens
+        );
+
+        res.json({
+            success: true,
+            output
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: err.message
+        });
+    }
+});
   
 const PORT = process.env.PORT || 3000;  
 app.listen(PORT, () => console.log("Running on", PORT));
