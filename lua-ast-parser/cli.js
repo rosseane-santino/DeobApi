@@ -5,6 +5,23 @@ const fs = require('fs');
 const path = require('path');
 const { parse } = require('./src/index');
 
+function parseLuaSource(source, file = '<memory>', includeTokens = false) {
+  const result = parse(source);
+
+  if (includeTokens) {
+    return {
+      file,
+      ast: result.ast,
+      tokens: result.tokens
+    };
+  }
+
+  return {
+    file,
+    ast: result.ast
+  };
+}
+
 // ─── CLI Argument Parser ──────────────────────────────────────────────────────
 
 function printHelp() {
@@ -79,7 +96,6 @@ function parseArgs(argv) {
     i++;
   }
 
-  // Positional arg is input file
   if (!args.input && args.positional.length > 0) {
     args.input = args.positional[0];
   }
@@ -99,12 +115,12 @@ function readInput(filePath) {
     return { source: fs.readFileSync(resolved, 'utf8'), file: resolved };
   }
 
-  // Read from stdin
   if (process.stdin.isTTY) {
     console.error('Error: No input file specified and no stdin data available.');
     console.error('Use --help for usage information.');
     process.exit(1);
   }
+
   return { source: fs.readFileSync('/dev/stdin', 'utf8'), file: '<stdin>' };
 }
 
@@ -114,7 +130,11 @@ function writeOutput(filePath, content) {
   if (filePath) {
     const resolved = path.resolve(filePath);
     const dir = path.dirname(resolved);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
     fs.writeFileSync(resolved, content, 'utf8');
   } else {
     process.stdout.write(content + '\n');
@@ -129,12 +149,15 @@ function formatError(err, source, file) {
   const colNum = err.col || 0;
 
   let out = `\n  ${err.message}\n`;
+
   if (lineNum > 0 && lineNum <= lines.length) {
     const srcLine = lines[lineNum - 1];
+
     out += `\n  File: ${file}\n`;
     out += `  ${lineNum} | ${srcLine}\n`;
     out += `  ${' '.repeat(String(lineNum).length + 2 + colNum - 1)}^\n`;
   }
+
   return out;
 }
 
@@ -162,45 +185,82 @@ function main() {
   }
 
   let result;
+
   try {
     result = parse(source);
   } catch (err) {
     if (err.line !== undefined) {
-      process.stderr.write('\x1b[31mParse Error:\x1b[0m' + formatError(err, source, file));
+      process.stderr.write(
+        '\x1b[31mParse Error:\x1b[0m' +
+        formatError(err, source, file)
+      );
     } else {
       process.stderr.write(`\x1b[31mError:\x1b[0m ${err.message}\n`);
     }
+
     process.exit(1);
   }
 
   const indent = args.pretty ? args.indent : undefined;
 
   let output;
+
   if (args.tokens) {
-    output = JSON.stringify({ file, ast: result.ast, tokens: result.tokens }, null, indent);
+    output = JSON.stringify(
+      {
+        file,
+        ast: result.ast,
+        tokens: result.tokens
+      },
+      null,
+      indent
+    );
   } else {
-    output = JSON.stringify({ file, ast: result.ast }, null, indent);
+    output = JSON.stringify(
+      {
+        file,
+        ast: result.ast
+      },
+      null,
+      indent
+    );
   }
 
   writeOutput(args.output, output);
 
   if (!args.quiet && args.output) {
     const nodeCount = countNodes(result.ast);
-    process.stderr.write(`\x1b[32m✓\x1b[0m AST written to ${args.output} (${nodeCount} nodes)\n`);
+
+    process.stderr.write(
+      `\x1b[32m✓\x1b[0m AST written to ${args.output} (${nodeCount} nodes)\n`
+    );
   }
 }
 
 function countNodes(node) {
-  if (!node || typeof node !== 'object') return 0;
+  if (!node || typeof node !== 'object') {
+    return 0;
+  }
+
   let count = node.type ? 1 : 0;
+
   for (const val of Object.values(node)) {
     if (Array.isArray(val)) {
-      for (const item of val) count += countNodes(item);
+      for (const item of val) {
+        count += countNodes(item);
+      }
     } else if (val && typeof val === 'object') {
       count += countNodes(val);
     }
   }
+
   return count;
 }
 
-main();
+module.exports = {
+  parseLuaSource
+};
+
+if (require.main === module) {
+  main();
+                                 }
