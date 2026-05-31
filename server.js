@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");  
 const multer = require("multer");  
 const { renameCode } = require("./renamer");  
+const { parseLuaSource } = require("./lua-ast-parser/cli.js");
   
 const { deobfuscate } = require("./index");  
 const { deobfuscateFile } = require("./white/cli/run");  
@@ -330,19 +331,19 @@ app.post("/ast", upload.single("file"), async (req, res) => {
 
         fs.unlinkSync(req.file.path);
 
-        const ast = parseLuaSource(
+        const output = parseLuaSource(
             code,
             req.file.originalname || "script.lua",
             true // include tokens
         );
 
-        res.json({
+        return res.json({
             success: true,
             output
         });
 
     } catch (err) {
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             error: err.message
         });
