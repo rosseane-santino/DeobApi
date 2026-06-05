@@ -4,6 +4,7 @@ const path = require("path");
 const multer = require("multer");  
 const { renameCode } = require("./renamer");  
 const { parseLuaSource } = require("./lua-ast-parser/cli.js");
+const { luaObfDeobfuscate } = require("./luaobf");
   
 const { deobfuscate } = require("./index");  
 const { deobfuscateFile } = require("./white/cli/run");  
@@ -349,6 +350,34 @@ app.post("/ast", upload.single("file"), async (req, res) => {
         });
     }
 });
-  
+
+app.post("/deobf3", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: "No file uploaded"
+            });
+        }
+
+        const code = fs.readFileSync(req.file.path, "utf8");
+
+        fs.unlinkSync(req.file.path);
+
+        const output = await luaObfDeobfuscate(code);
+
+        res.json({
+            success: true,
+            output
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: err.message
+        });
+    }
+});
+
 const PORT = process.env.PORT || 3000;  
 app.listen(PORT, () => console.log("Running on", PORT));
