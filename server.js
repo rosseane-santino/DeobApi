@@ -219,35 +219,222 @@ app.post("/ib2", upload.single("file"), async (req, res) => {
     }  
 });  
   
-// -------------------- /rename --------------------  
-app.post("/rename", upload.single("file"), async (req, res) => {  
-    try {  
-        if (!req.file) {  
-            return res.status(400).send("No file uploaded");  
-        }  
-  
-        const code = fs.readFileSync(req.file.path, "utf8");  
-  
-        fs.unlinkSync(req.file.path);  
-  
-        const prompt =  
-            "fully rename the vars and dont add coments to the code and dont comment on it yourself (and dont just give me half of thr code i want full code) here: " +  
-            encodeURIComponent(code);  
-  
-        const url = `https://text.pollinations.ai/${prompt}?model=openai`;  
-  
-        const response = await fetch(url);  
-        const result = await response.text();  
-  
-res.json({
-    success: true,
-    output: result
+// -------------------- /rename --------------------
+app.post("/rename", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        const code = fs.readFileSync(req.file.path, "utf8");
+        fs.unlinkSync(req.file.path);
+
+        function splitTopLevel(str) {
+            const parts = [];
+            let cur = "";
+            let depth = 0;
+            let quote = null;
+            let escaped = false;
+
+            for (let i = 0; i < str.length; i++) {
+                const ch = str[i];
+
+                if (quote) {
+                    cur += ch;
+                    if (escaped) {
+                        escaped = false;
+                    } else if (ch === "\\") {
+                        escaped = true;
+                    } else if (ch === quote) {
+                        quote = null;
+                    }
+                    continue;
+                }
+
+                if (ch === '"' || ch === "'") {
+                    quote = ch;
+                    cur += ch;
+                    continue;
+                }
+
+                if (ch === "(" || ch === "[" || ch === "{") {
+                    depth++;
+                    cur += ch;
+                    continue;
+                }
+
+                if (ch === ")" || ch === "]" || ch === "}") {
+                    depth = Math.max(0, depth - 1);
+                    cur += ch;
+                    continue;
+                }
+
+                if (ch === "," && depth === 0) {
+                    parts.push(cur.trim());
+                    cur = "";
+                    continue;
+                }
+
+                cur += ch;
+            }
+
+            if (cur.trim() !== "" || str.trim() === "") parts.push(cur.trim());
+            return parts;
+        }
+
+        function rewriteText(text, map) {
+            let out = "";
+            let i = 0;
+            let quote = null;
+            let escaped = false;
+
+            while (i < text.length) {
+                const ch = text[i];
+                const next = text[i + 1];
+
+                if (!quote && ch === "-" && next === "-") {
+                    out += text.slice(i);
+                    break;
+                }
+
+                if (quote) {
+                    out += ch;
+                    if (escaped) {
+                        escaped = false;
+                    } else if (ch === "\\") {
+                        escaped = true;
+                    } else if (ch === quote) {
+                        quote = null;
+                    }
+                    i++;
+                    continue;
+                }
+
+                if (ch === '"' || ch === "'") {
+                    quote = ch;
+                    out += ch;
+                    i++;
+                    continue;
+                }
+
+                if (/[A-Za-z_]/.test(ch)) {
+                    let j = i + 1;
+                    while (j < text.length && /[A-Za-z0-9_]/.test(text[j])) j++;
+                    const id = text.slice(i, j);
+                    out += map[id] || id;
+                    i = j;
+                    continue;
+                }
+
+                out += ch;
+                i++;
+            }
+
+            return out;
+        }
+
+        function directCanonical(expr) {
+            const s = expr.trim();
+
+            const service = s.match(/^game:GetService\(["']([^"']+)["']\)$/);
+            if (service) return service[1];
+
+            const inst = s.match(/^Instance\.new\(["']([^"']+)["']\)$/);
+            if (inst) return inst[1];
+
+            const prop = s.match(/^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.([A-Z][A-Za-z0-9_]*)$/);
+            if (prop) return prop[2];
+
+            return null;
+        }
+
+        const localLine = /^(\s*)local\s+(.+?)\s*=\s*(.+)$/;
+
+        const directMap = {};
+        const aliasLink = {};
+
+        const lines = code.split(/\r?\n/);
+
+        for (const line of lines) {
+            const m = line.match(localLine);
+            if (!m) continue;
+
+            const lhsList = splitTopLevel(m[2]);
+            const rhsList = splitTopLevel(m[3]);
+
+            if (lhsList.length !== rhsList.length) continue;
+
+            for (let i = 0; i < lhsList.length; i++) {
+                const lhs = lhsList[i].trim();
+                const rhs = rhsList[i].trim();
+
+                const canon = directCanonical(rhs);
+                if (canon) {
+                    directMap[lhs] = canon;
+                    continue;
+                }
+
+                const bare = rhs.match(/^([A-Za-z_]\w*)$/);
+                if (bare) {
+                    aliasLink[lhs] = bare[1];
+                }
+            }
+        }
+
+        function resolve(name, seen = new Set()) {
+            if (directMap[name]) return directMap[name];
+            if (seen.has(name)) return null;
+            seen.add(name);
+            if (aliasLink[name]) return resolve(aliasLink[name], seen);
+            return null;
+        }
+
+        const finalMap = {};
+        for (const name of new Set([...Object.keys(directMap), ...Object.keys(aliasLink)])) {
+            const v = resolve(name);
+            if (v) finalMap[name] = v;
+        }
+
+        const outLines = lines.map((line) => {
+            const m = line.match(localLine);
+            if (!m) return rewriteText(line, finalMap);
+
+            const indent = m[1];
+            const lhsList = splitTopLevel(m[2]);
+            const rhsList = splitTopLevel(m[3]);
+
+            if (lhsList.length !== rhsList.length) {
+                return rewriteText(line, finalMap);
+            }
+
+            const newLhs = [];
+            const newRhs = [];
+
+            for (let i = 0; i < lhsList.length; i++) {
+                const lhs = lhsList[i].trim();
+                const rhs = rhsList[i].trim();
+
+                newLhs.push(directMap[lhs] || lhs);
+                newRhs.push(rewriteText(rhs, finalMap));
+            }
+
+            return `${indent}local ${newLhs.join(", ")} = ${newRhs.join(", ")}`;
+        });
+
+        const output = outLines.join("\n");
+
+        res.json({
+            success: true,
+            output
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: err.message
+        });
+    }
 });
-  
-    } catch (err) {  
-        res.status(500).send(err.message);  
-    }  
-});  
 
 // -------------------- /obf --------------------
 app.post("/obf", upload.single("file"), async (req, res) => {
